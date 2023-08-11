@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteMappingsManager">
+    <list>
+      <list>
+        <remote-mappings server-id="python@sftp://ubuntu@1.13.24.217:22/home/ubuntu/anaconda3/bin/python">
+          <settings>
+            <list>
+              <mapping local-root="$PROJECT_DIR$" remote-root="/home/ubuntu/DataValuation" />
+            </list>
+          </settings>
+        </remote-mappings>
+        <remote-mappings server-id="python@sftp://ubuntu@101.42.97.177:22/home/ubuntu/anaconda3/bin/python" />
+        <remote-mappings server-id="python@sftp://ubuntu@1.13.249.244:22/home/ubuntu/anaconda3/envs/graph/bin/python3" />
+      </list>
+    </list>
+  </component>
+</project>

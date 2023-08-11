@@ -1,0 +1,77 @@
+
+def calculate_scale(image_amount):
+    owner_amount = len(image_amount)
+    result_amount = 2**owner_amount - 1
+    mid_result = [None]*owner_amount
+    result = []
+    for i in range(1,result_amount+1):
+        sumi = 0
+        tmp = i
+        for j in range(owner_amount):
+            if(tmp&1):
+                sumi += image_amount[j]
+                mid_result[j] = image_amount[j]
+            else:
+                mid_result[j] = 0
+            tmp = tmp>>1
+        for j in range(owner_amount):
+            mid_result[j] = 1.0*mid_result[j]/sumi
+        result.append(mid_result[:])
+
+    return result
+    
+        
+        
+
+##################################
+# the image amout of every owner
+n = [1000]
+m = 1
+sum_num = 2**m - 1
+w = calculate_scale(n)
+scale = Matrix(m,sum_num,sfix)
+index_i = 0
+index_j = 0
+@for_range_opt(sum_num)
+def col1(i):
+    global index_i
+    global index_j
+    index_j = 0
+    @for_range_opt(m)
+    def col(j):
+        global index_j
+        scale[j][i] = w[index_i][index_j]
+        index_j = index_j+1
+    index_i = index_i+1
+####################################
+deepfc3 = Matrix(1,256,sfix)
+deepfc3.input_from(0)
+
+L3_input_Model = Matrix(256,m,sfix)
+L3_input_1 = Matrix(256,m,sfix)
+L3_result = Matrix(256,m,sfix)
+L3_input_Model.input_from(0)
+for i in range(m):
+    @for_range_opt(256)
+    def t(j):
+        L3_input_1[j][i] = sfix.get_input_from(i+1)
+
+L3_result = L3_input_Model+L3_input_1
+break_point()
+L3 = L3_result*scale
+break_point()
+@for_range_opt(256)
+def sl2(i):
+    @for_range_opt(sum_num)
+    def col(j):
+        L3 [i][j]= L3[i][j].square()
+        print_ln("%s",L3[i][j].reveal())
+break_point()
+L4 = deepfc3*L3
+break_point()
+b = sfix.get_input_from(0)
+@for_range_opt(sum_num)
+def pt(i):
+    print_ln("%s",L4[0][i].reveal())
+    L4[0][i] = L4[0][i]+b
+    print_ln("%s",L4[0][i].reveal())

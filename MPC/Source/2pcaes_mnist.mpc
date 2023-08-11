@@ -1,0 +1,287 @@
+from circuit import Circuit
+
+program.set_bit_length(128)
+sfix.set_precision(24,39)
+cfix.set_precision(24,39)
+
+# encrypt function
+aes256 = Circuit('aes_256')
+sha256 = Circuit('sha256')
+# type define
+sb256 = sbits.get_type(256)
+sb128 = sbits.get_type(128)
+sb9 = sbits.get_type(9)
+
+key_sha = sb256(0x6a09e667bb67ae853c6ef372a54ff53a510e527f9b05688c1f83d9ab5be0cd19)
+key_aes = sb256.get_input_from(1)
+encode_key = sbitvec([key_aes]*784)
+padding = sb256(  0x8000000000000000000000000000000000000000000000000000000000000100)
+padding_sha =[]
+padding_sha += sbitvec([padding]).v
+padding_sha += sbitvec([key_aes]).v 
+
+
+hash_result = sha256(sbitvec.from_vec(padding_sha),sbitvec([key_sha]))
+hash_result.elements()[0].reveal().print_reg()
+
+# define the number of parrel
+n = 28*28
+
+#================================================================
+c = 0
+def im2col(data_after,channels,height,width,ksize,stride,pad,raw):
+    height_col = int((height + 2*pad-ksize)/stride)+1
+    # the  result height
+    width_col = int((width+2*pad-ksize)/stride)+1
+    #the result width
+    channels_col = channels*ksize*ksize
+    global c
+    c = -1
+    # for c in range(channels_col):
+    @for_range_opt(channels_col)
+    def change(q):
+        global c
+        c+=1
+        w_offset = int(c % ksize)
+        h_offset = int((c / ksize) % ksize)
+        c_im = int(c / ksize / ksize)
+        # for h in range(height_col):
+           #  for w in range(width_col):
+        global h
+        global w
+        h = 0
+        w = -1
+        @for_range_opt(height_col*width_col)
+        def t_(i):
+                global h
+                global w
+                w += 1
+                if w==width_col:
+                    w = 0
+                    h +=1 
+                im_row = h_offset + h * stride
+                im_col = w_offset + w * stride
+                col_index = (c * height_col + h) * width_col + w
+                im_row = im_row-pad
+                im_col = im_col-pad
+                if(im_row <0 or im_col <0 or im_row>= height or im_col>=width):
+                    data_after[c][w+h*width_col] = sfix(0)
+                else:
+                    data_after[c][w+h*width_col]= raw[c_im][im_row*width + im_col]
+    return
+ 
+
+def conv2d(data_after,raw,weight,channels,height,width,ksize,stride,pad):
+    im2col(data_after,channels,height,width,ksize,stride,pad,raw)
+    result = weight * data_after
+    return result         
+
+#############################
+# read matrix
+# (28-4+2)/2+1 = 14
+data_after_tran = Matrix(16,14*14,sfix)
+
+ 
+#############################
+# parameters define
+W1 = Matrix(16,4*4,sfix)
+bn1_b = Matrix(16,1,sfix)
+#############################
+
+
+
+#############################
+# parameters read 
+W1.input_from(0)
+bn1_b.input_from(0)
+
+#############################
+
+# deep net 
+deepfc = Matrix(512,3136,sfix)
+deepfc.input_from(0)
+
+deepfc_2 = Matrix(256,512,sfix)
+deepfc_2.input_from(0)
+
+L2 = Matrix(512,1,sfix)
+L2.assign_all(0)
+
+
+L2_result = Matrix(512,1,sfix)
+L2_result.assign_all(0)
+
+deepfc3 = Matrix(1,256,sfix)
+deepfc3.input_from(0)
+
+amount =100
+batch = 128 
+sb8 = sbit.get_type(9)
+data = Matrix(1,28*28,sint)
+n = 1.0/amount
+batch_num = int(amount/batch)
+
+data_set = Matrix(128,28*28,sint)
+
+@for_range_opt(batch_num)
+def b(batch_index):
+    L2.assign_all(0)
+
+    @for_range_opt(8)
+    def t(i):
+        new = []
+        for k in  range(16):
+            test = []
+            @for_range_opt(28*28)
+            def f2(j):
+                tmp = sb9.get_input_from(1)
+                test.append(tmp)
+                data_set[i*16+k][j] =  tmp.to_sint(8)
+            block = sbitvec(test)
+            new += block.v[:-1]
+
+    
+        ciphertexts = aes256(encode_key, sbitvec.from_vec(new))
+        global hashi 
+        hashi = -1
+        @for_range_opt(28*28)
+        def _(t2):
+            global hashi 
+            hashi = hashi + 1
+            ciphertexts.elements()[hashi].reveal().print_reg()
+
+    @for_range_opt(batch)
+    def t(num):
+        global new
+        global test
+        test = []
+        @for_range_opt(28*28)
+        def f(j):
+            data[0][j] = data_set[num][j]
+            
+        L1 = conv2d(data_after_tran,data,W1,1,28,28,4,2,1)
+        break_point()
+        L2_input = Matrix(3136,1,sfix)
+
+        @for_range_opt(14*14)
+        def p(j):
+            @for_range_opt(16)
+            def new(i):
+                # print_ln("result:%s",L1[i][j].reveal())
+                # L1[i][j] = L1[i][j]+bn1_b[i]
+                # print_ln("result:%s",L1[i][j].reveal())
+                L2_input[i*14*14+j][0] = (L1[i][j]+bn1_b[i]).square()
+
+
+        L2_mid = deepfc*L2_input
+        break_point()
+        @for_range_opt(512)
+        def sl(i):
+            L2[i][0] += L2_mid[i][0].square()
+            #print_ln("result2:%s",L2[i].reveal())
+
+    @for_range_opt(512)
+    def mean(i):
+        L2_result[i][0] += L2[i][0]*cfix(n)
+        # print_ln("result2:%s",L2[i][0].reveal())
+
+
+hash_group_n = int((amount%batch)/16)
+print(hash_group_n)
+remain = int((amount%batch)%16)
+print(remain)
+@for_range_opt(hash_group_n)
+def t(i):
+    new = []
+    for k in  range(16):
+        test = []
+        @for_range_opt(28*28)
+        def f2(j):
+            tmp = sb9.get_input_from(1)
+            test.append(tmp)
+            data_set[i*16+k][j] =  tmp.to_sint(8)
+        block = sbitvec(test)
+        new += block.v[:-1]
+
+
+    ciphertexts = aes256(encode_key, sbitvec.from_vec(new))
+    global hashi 
+    hashi = -1
+    @for_range_opt(28*28)
+    def _(t2):
+        global hashi 
+        hashi = hashi + 1
+        ciphertexts.elements()[hashi].reveal().print_reg()
+
+new = []
+for k in range(remain):
+    test = []
+    @for_range_opt(28*28)
+    def f2(j):
+        tmp = sb9.get_input_from(1)
+        test.append(tmp)
+        data_set[hash_group_n*16+k][j] =  tmp.to_sint(8)
+    block = sbitvec(test)
+    new += block.v[:-1]
+
+if remain != 0:
+    sbn = sbits.get_type(784)   
+    padding = [sbn(0)] * (128 - len(new))
+    new += padding
+    ciphertexts = aes256(encode_key, sbitvec.from_vec(new))
+    global hashi 
+    hashi = -1
+    @for_range_opt(28*28)
+    def _(t2):
+        global hashi 
+        hashi = hashi + 1
+        ciphertexts.elements()[hashi].reveal().print_reg()
+L2.assign_all(0)
+@for_range_opt(amount%batch)
+def t(num):
+
+    global new
+    global test
+    test = []
+    @for_range_opt(28*28)
+    def f(j):
+        data[0][j] = data_set[num][j]
+    L1 = conv2d(data_after_tran,data,W1,1,28,28,4,2,1)
+    break_point()
+    L2_input = Matrix(3136,1,sfix)
+
+    @for_range_opt(14*14)
+    def p2(j):
+        @for_range_opt(16)
+        def new2(i):
+            # print_ln("result:%s",L1[i][j].reveal())
+            # L1[i][j] = L1[i][j]+bn1_b[i]
+            # print_ln("result:%s",L1[i][j].reveal())
+            L2_input[i*14*14+j][0] = (L1[i][j]+bn1_b[i]).square()
+
+
+    L2_mid = deepfc*L2_input
+    break_point()
+    @for_range_opt(512)
+    def sl(i):
+        L2[i][0] += L2_mid[i][0].square()
+        #print_ln("result2:%s",L2[i].reveal())
+
+
+@for_range_opt(512)
+def mean(i):
+    L2_result[i][0] += L2[i][0]*cfix(n)
+    #print_ln("result2:%s",L2[i][0].reveal())
+
+L3_input = deepfc_2*L2_result
+break_point()
+
+L3_random = Matrix(256,1,sfix)
+L3_result = Matrix(256,1,sfix)
+@for_range_opt(256)
+def t(i):
+    # print_ln("%s",L3_input[i][0].reveal())
+    L3_random[i][0] = sfix.get_random(-5000,5000)
+    L3_result[i][0] = L3_input[i][0] - L3_random[i][0]
+    print_ln_to(0,"%s",L3_result[i][0].reveal_to(0))
+    print_ln_to(1,"%s",L3_random[i][0].reveal_to(1))
