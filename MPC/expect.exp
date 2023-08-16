@@ -1,0 +1,31 @@
+#!/usr/bin/expect
+
+set ip [lindex $argv 0 ]     
+set password [lindex $argv 1 ]  
+set i [lindex $argv 2 ]  
+set timeout -1      
+    
+
+spawn scp -r ./MP-SPDZ/Programs/Source/end.mpc  ubuntu@$ip:/home/ubuntu/MP-SPDZ/Programs/Source/  
+expect {               
+    "*yes/no" { send "yes\r"; exp_continue}  
+    "*password:" { send "${password}\r"}      
+} 
+expect EOF     
+
+
+
+spawn ssh ubuntu@$ip       
+expect {               
+    "*yes/no" { send "yes\r"; exp_continue}  
+    "*password:" { send "${password}\r"}      
+} 
+
+expect "*$*" {send "cd MP-SPDZ\r"}
+
+expect "*$*" {send "./compile.py -R 64 end\r"}
+
+
+expect "*$*" {send "exit\r"}
+expect EOF
+
